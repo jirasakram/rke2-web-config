@@ -33,7 +33,7 @@ spec:
        - name: harbor-key
       containers:
       - name: nginx
-        image: hub.ru.ac.th/web-apps/nginx-custom:v1 # 🐳 เปลี่ยนมาใช้ชื่อ Registry ของเราเอง
+        image: hub.ru.ac.th/web-apps/nginx-custom:v2 # 🐳 เปลี่ยนมาใช้ชื่อ Registry ของเราเอง
         ports:
         - containerPort: 80
     # 🌟 เพิ่มท่อนนี้เข้าไปใต้ container เพื่อบอกขนาดตัวครับ
