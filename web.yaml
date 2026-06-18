@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-nginx
+  namespace: web
+spec:
+  replicas: 6                       # 🌟 1. ขยายร่างเป็น 6 Pods รับโหลดหนัก
+  selector:
+    matchLabels:
+      app: web-nginx
+  template:
+    metadata:
+      labels:
+        app: web-nginx
+    spec:
+      nodeSelector:                 # 🌟 2. ล็อกเป้าหนีจากสมองกล ลงเฉพาะเครื่องแรงงาน RKE2
+        node-role.kubernetes.io/worker: "worker"
+      # 🌟 เติมท่อนกระจายความเสี่ยงตั้งแต่ตรงนี้เป็นต้นไปครับ
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution: # 🤝 กฎแบบยืดหยุ่น พยายามกระจายให้มากที่สุด
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - web-nginx                             # 🎯 เล็งเป้ากลุ่มป้ายชื่อแอปตัวเอง
+              topologyKey: "kubernetes.io/hostname"       # 🗺️ บังคับเช็คตามชื่อเครื่องเซิร์ฟเวอร์ 
+             # 🌟 เติมท่อนคีย์การ์ด Harbor ตรงนี้ครับ
+      imagePullSecrets:
+       - name: harbor-key
+      containers:
+      - name: nginx
+        image: hub.ru.ac.th/web-apps/nginx-custom:v1 # 🐳 เปลี่ยนมาใช้ชื่อ Registry ของเราเอง
+        ports:
+        - containerPort: 80
+    # 🌟 เพิ่มท่อนนี้เข้าไปใต้ container เพื่อบอกขนาดตัวครับ
+        resources:
+          requests:
+            memory: "256Mi" # RAM ที่ขอจองตอนเกิด (ของแต่ละ Pod)
+            cpu: "250m"       # 🧠 CPU ที่ขอจองตอนเกิด (0.25 Core)  
+             
+          limits:
+            memory: "512Mi"   # 🚀 ช่วงงานหนักสุดยอมให้วิ่งพีคได้ไม่เกิน 512MB
+            cpu: "500m"       # 🚀 CPU สูงสุดที่ยอมให้วิ่งพีค (0.5 Core)
+            # 🌟 เติมท่อนระบบตรวจสุขภาพตั้งแต่ตรงนี้เป็นต้นไปครับ
+        readinessProbe:
+          httpGet:
+            path: /               # 🚪 สั่งให้วิ่งไปเคาะประตูที่หน้าแรกของเว็บ (พอร์ต 80)
+            port: 80
+          initialDelaySeconds: 5  # ⏱️ หลังจาก Pod เกิด ให้รอ 5 วินาทีค่อยเริ่มเคาะครั้งแรก (ให้เวลาแอปบิดขี้เกียจ)
+          periodSeconds: 5        # ⏱️ คอยวิ่งไปเคาะตรวจสุขภาพซ้ำทุก ๆ 5 วินาที
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10 # ⏱️ รอ 10 วินาทีค่อยเริ่มตรวจ (ให้เวลาเปิดระบบหลังบ้านให้เสร็จ)
+          periodSeconds: 10       # ⏱️ ตรวจสอบการหายใจทุก ๆ 10 วินาทีตลอดชีวิตของมัน
+          failureThreshold: 3     # ❌ ถ้าเคาะแล้วแอปเงียบหรือพังติดต่อกัน 3 ครั้ง... สั่ง Kill แล้วสั่งเกิดใหม่ทันที!  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-nginx
+  namespace: web
+spec:
+  selector:
+    app: web-nginx
+  ports:
+  - port: 80
+    targetPort: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-ingress
+  namespace: web
+  annotations:                      # 🌟 3. บังคับถ้าใครพิมพ์ http ให้เด้งไป https ทันที
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx-web
+  tls:                              # 🌟 4. ผูกใบรับรอง Wildcard ให้ท่อปลอดภัยกุญแจเขียว
+  - hosts:
+    - app.ru.ac.th
+    secretName: web-app-tls
+  rules:
+  - host: app.ru.ac.th              # 🌟 5. เปลี่ยนมาใช้โดเมนจริงแทนตัวทดสอบเดิม
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-nginx
+            port:
+              number: 80
