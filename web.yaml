@@ -4,7 +4,7 @@ metadata:
   name: web-nginx
   namespace: web
 spec:
-  replicas: 8                     # 🌟 1. ขยายร่างเป็น 6 Pods รับโหลดหนัก
+  replicas: 10                     # 🌟 1. ขยายร่างเป็น 6 Pods รับโหลดหนัก
   selector:
     matchLabels:
       app: web-nginx
